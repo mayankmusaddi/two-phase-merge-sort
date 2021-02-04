@@ -2,6 +2,8 @@ import sys
 import os
 import math
 import heapq
+import threading
+import numpy as np
 
 class Tuple(object):
     def __init__(self, val, columns, order, fp = -1):
@@ -60,16 +62,46 @@ def sort_sublist(lines, columns, order, j):
 
 def run_phase1(FILENAME, num_mem_tuples, columns, order):
     lines = []
-    j = 0
+    fn = 0
     with open(FILENAME, "r") as f:
         for i,line in enumerate(f):
             lines.append(Tuple(line.rstrip().split("  "), columns, order))
             if (i+1) % num_mem_tuples == 0:
-                sort_sublist(lines, columns, order, j)
-                j += 1
+                sort_sublist(lines, columns, order, fn)
+                fn += 1
                 lines = []
         if len(lines) != 0:
-            sort_sublist(lines, columns, order, j)
+            sort_sublist(lines, columns, order, fn)
+
+def run_phase1_parallel(FILENAME, num_threads, num_mem_tuples, columns, order):
+    lines = []
+    fn = 0
+    with open(FILENAME, "r") as f:
+        for i,line in enumerate(f): 
+            lines.append(Tuple(line.rstrip().split("  "), columns, order))
+            if (i+1) % num_mem_tuples == 0:
+                thread_lines = np.array_split(lines, num_threads)
+                threads = []
+                for j in range(0, num_threads):
+                    lines = thread_lines[j]
+                    thread = threading.Thread(target=sort_sublist, args=(lines, columns, order, fn))
+                    threads.append(thread)
+                    thread.start()
+                    fn += 1
+                for thread in threads:
+                    thread.join()
+                lines = []
+        if len(lines) != 0:
+            thread_lines = np.array_split(lines, num_threads)
+            threads = []
+            for j in range(0, num_threads):
+                lines = thread_lines[j]
+                thread = threading.Thread(target=sort_sublist, args=(lines, columns, order, fn))
+                threads.append(thread)
+                thread.start()
+                fn += 1
+            for thread in threads:
+                thread.join()
 
 def get_total_tuples(FILENAME):
     if not os.path.isfile(FILENAME):
@@ -163,11 +195,17 @@ if __name__ == '__main__':
     print(num_mem_tuples, num_splits)
     print(total_tuples)
 
+    if num_threads > 0:
+        num_splits = num_splits * num_threads
+
     print("####start execution")
     print("####running Phase-1")
     print("Number of sub-files (splits): ", num_splits)
 
-    run_phase1(input_file, num_mem_tuples, columns, order)
+    if num_threads > 0:
+        run_phase1_parallel(input_file, num_threads, num_mem_tuples, columns, order)
+    else:
+        run_phase1(input_file, num_mem_tuples, columns, order)
     run_phase2(output_file, num_splits, num_mem_tuples, columns, order)
 
     print("###completed execution")
