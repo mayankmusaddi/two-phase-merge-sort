@@ -19,7 +19,15 @@ class Tuple(object):
                 return res if not self.order else not res
         return False
 
-def run_phase2(FILENAME, num_splits, num_mem_tuples, columns, order):
+def get_tuple(line, sizes):
+    tup = []
+    start = 0
+    for size in sizes:
+        tup.append(line[start:start+size])
+        start += size+2
+    return tup
+
+def run_phase2(FILENAME, num_splits, num_mem_tuples, columns, sizes, order):
     print("##running phase-2")
     fp = []
     for i in range(0,num_splits):
@@ -30,7 +38,8 @@ def run_phase2(FILENAME, num_splits, num_mem_tuples, columns, order):
     h = []
     for i in range(0,num_splits):
         line = fp[i].readline()
-        line = Tuple(line.rstrip().split("  "), columns, order, i)
+        tup = get_tuple(line, sizes)
+        line = Tuple(tup, columns, order, i)
         heapq.heappush(h, line)
 
     print("Writing to disk")
@@ -41,7 +50,8 @@ def run_phase2(FILENAME, num_splits, num_mem_tuples, columns, order):
         i = s.fp
         line = fp[i].readline()
         if line != '':
-            line = Tuple(line.rstrip().split("  "), columns, order, i)
+            tup = get_tuple(line, sizes)
+            line = Tuple(tup, columns, order, i)
             heapq.heappush(h, line)
         else:
             os.remove(f'temp{i}.txt')
@@ -60,12 +70,13 @@ def sort_sublist(lines, columns, order, j):
 
     print("Writing to disk #{}".format(j+1))
 
-def run_phase1(FILENAME, num_mem_tuples, columns, order):
+def run_phase1(FILENAME, num_mem_tuples, columns, sizes, order):
     lines = []
     fn = 0
     with open(FILENAME, "r") as f:
         for i,line in enumerate(f):
-            lines.append(Tuple(line.rstrip().split("  "), columns, order))
+            tup = get_tuple(line, sizes)
+            lines.append(Tuple(tup, columns, order))
             if (i+1) % num_mem_tuples == 0:
                 sort_sublist(lines, columns, order, fn)
                 fn += 1
@@ -73,12 +84,13 @@ def run_phase1(FILENAME, num_mem_tuples, columns, order):
         if len(lines) != 0:
             sort_sublist(lines, columns, order, fn)
 
-def run_phase1_parallel(FILENAME, num_threads, num_mem_tuples, columns, order):
+def run_phase1_parallel(FILENAME, num_threads, num_mem_tuples, columns, sizes, order):
     lines = []
     fn = 0
     with open(FILENAME, "r") as f:
         for i,line in enumerate(f): 
-            lines.append(Tuple(line.rstrip().split("  "), columns, order))
+            tup = get_tuple(line, sizes)
+            lines.append(Tuple(tup, columns, order))
             if (i+1) % num_mem_tuples == 0:
                 thread_lines = np.array_split(lines, num_threads)
                 threads = []
@@ -116,15 +128,15 @@ def get_total_tuples(FILENAME):
 
 def read_metadata(FILENAME = "metadata.txt"):
     columns = []
-    tuple_size = 0
+    sizes = []
     with open(FILENAME, 'r') as f:
         lines = f.readlines()
         for line in lines:
             t = line.split(",")
             t = [x.strip() for x in t]
             columns.append(t[0])
-            tuple_size += int(t[1])
-    return columns, tuple_size
+            sizes.append(int(t[1]))
+    return columns, sizes
 
 def read_args():
     n_args = len(sys.argv) - 1
@@ -183,7 +195,8 @@ def get_col_ind(total_columns, column_args):
     return columns
 
 if __name__ == '__main__':
-    total_columns, tuple_size = read_metadata()
+    total_columns, sizes = read_metadata()
+    tuple_size = sum(sizes)
     input_file, output_file, mem_size, num_threads, order, column_args = read_args()
     columns = get_col_ind(total_columns, column_args)
     
@@ -198,14 +211,18 @@ if __name__ == '__main__':
     if num_threads > 0:
         num_splits = num_splits * num_threads
 
+    if num_splits > num_mem_tuples:
+        print("Infeasible condition for two phase merge")
+        exit(0)
+
     print("####start execution")
     print("####running Phase-1")
     print("Number of sub-files (splits): ", num_splits)
 
     if num_threads > 0:
-        run_phase1_parallel(input_file, num_threads, num_mem_tuples, columns, order)
+        run_phase1_parallel(input_file, num_threads, num_mem_tuples, columns, sizes, order)
     else:
-        run_phase1(input_file, num_mem_tuples, columns, order)
-    run_phase2(output_file, num_splits, num_mem_tuples, columns, order)
+        run_phase1(input_file, num_mem_tuples, columns, sizes, order)
 
+    run_phase2(output_file, num_splits, num_mem_tuples, columns, sizes, order)
     print("###completed execution")
