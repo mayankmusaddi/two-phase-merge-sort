@@ -4,6 +4,7 @@ import math
 import heapq
 import threading
 import numpy as np
+import time
 
 class Tuple(object):
     def __init__(self, val, columns, order, fp = -1):
@@ -195,18 +196,20 @@ def get_col_ind(total_columns, column_args):
     return columns
 
 if __name__ == '__main__':
+    start_time = time.time()
+
     total_columns, sizes = read_metadata()
     tuple_size = sum(sizes)
     input_file, output_file, mem_size, num_threads, order, column_args = read_args()
     columns = get_col_ind(total_columns, column_args)
     
-    print(input_file, output_file, mem_size, num_threads, order, column_args)
-
     total_tuples = get_total_tuples(input_file)
     num_mem_tuples = math.floor(mem_size*1000000 / tuple_size)
     num_splits = math.ceil(total_tuples / num_mem_tuples)
-    print(num_mem_tuples, num_splits)
-    print(total_tuples)
+
+    # print(input_file, output_file, mem_size, num_threads, order, column_args)
+    # print(num_mem_tuples, num_splits)
+    # print(total_tuples)
 
     if num_threads > 0:
         num_splits = num_splits * num_threads
@@ -224,5 +227,11 @@ if __name__ == '__main__':
     else:
         run_phase1(input_file, num_mem_tuples, columns, sizes, order)
 
+    p1_end_time = time.time()
+    print("Phase1 Time Taken : ", p1_end_time - start_time)
+
     run_phase2(output_file, num_splits, num_mem_tuples, columns, sizes, order)
-    print("###completed execution")
+    end_time = time.time()
+
+    # print("###completed execution")
+    print("Time Taken : ", end_time - start_time)
